@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: tracelens
+  datasource:
+    url: ${TRACELENS_DB_URL:jdbc:postgresql://localhost:5432/tracelens?connectTimeout=2&socketTimeout=3&cancelSignalTimeout=1&options=-c%20statement_timeout%3D2000}
+    username: ${TRACELENS_DB_USERNAME}
+    password: ${TRACELENS_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 16
+      minimum-idle: 16
+      connection-timeout: 1000
+      validation-timeout: 500
+  data:
+    redis:
+      host: ${TRACELENS_REDIS_HOST:localhost}
+      port: ${TRACELENS_REDIS_PORT:6379}
+      connect-timeout: 500ms
+      timeout: 1s
+      lettuce:
+        shutdown-timeout: 100ms
+  mvc:
+    problemdetails:
+      enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+server:
+  shutdown: graceful
+  tomcat:
+    threads:
+      max: 64
+    connection-timeout: 5s
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,redis
+logging:
+  structured:
+    format:
+      console: logstash
+tracelens:
+  cache:
+    ttl: ${TRACELENS_CACHE_TTL:300s}

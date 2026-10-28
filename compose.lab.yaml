@@ -1,0 +1,18 @@
+services:
+  app:
+    image: tracelens-lab:local
+    environment:
+      SPRING_PROFILES_ACTIVE: lab
+      TRACELENS_LAB_TOKEN: ${TRACELENS_LAB_TOKEN:?Set a high-entropy lab token in .env}
+  runner:
+    image: tracelens-lab:local
+    profiles: [experiment]
+    command: [experiment]
+    user: "${TRACELENS_RUNNER_UID:-100}:${TRACELENS_RUNNER_GID:-100}"
+    environment:
+      TRACELENS_LAB_TOKEN: ${TRACELENS_LAB_TOKEN:?Set a high-entropy lab token in .env}
+    volumes:
+      - ./reports:/reports
+    depends_on:
+      app:
+        condition: service_healthy

@@ -1,0 +1,82 @@
+name: Verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Unit and infrastructure integration tests
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -ntp verify
+      - name: Build and smoke-test Compose
+        env:
+          TRACELENS_DB_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-isolated-ci
+        run: |
+          docker compose up --build --wait --wait-timeout 180
+          curl --fail --max-time 10 http://127.0.0.1:8080/api/products/1
+      - name: Smoke-test lab runner and inconclusive report
+        env:
+          TRACELENS_DB_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-isolated-ci
+        run: |
+          export TRACELENS_LAB_TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::$TRACELENS_LAB_TOKEN"
+          export TRACELENS_RUNNER_UID="$(id -u)"
+          export TRACELENS_RUNNER_GID="$(id -g)"
+          mkdir -p reports
+          docker compose -f compose.yaml -f compose.lab.yaml up --build --wait --wait-timeout 180
+          set +e
+          docker compose -f compose.yaml -f compose.lab.yaml --profile experiment run --rm -T runner experiment --concurrency 1 --repetitions 1 --delay-ms 0
+          runner_status=$?
+          set -e
+          test "$runner_status" -eq 2
+          python3 -c 'import glob,json; paths=glob.glob("reports/*.json"); assert len(paths)==1; report=json.load(open(paths[0])); assert report["outcome"]=="INCONCLUSIVE"; assert len(report["cohorts"])==3; assert len(glob.glob("reports/*.md"))==1'
+      - name: Verify optional tracing and exporter outage
+        env:
+          TRACELENS_DB_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-isolated-ci
+        run: |
+          export TRACELENS_LAB_TOKEN="$(openssl rand -hex 32)"
+          echo "::add-mask::$TRACELENS_LAB_TOKEN"
+          export TRACELENS_RUNNER_UID="$(id -u)" TRACELENS_RUNNER_GID="$(id -g)"
+          docker compose -f compose.yaml -f compose.lab.yaml -f compose.trace.yaml up --build --wait --wait-timeout 240
+          set +e
+          docker compose -f compose.yaml -f compose.lab.yaml -f compose.trace.yaml --profile experiment run --rm -T runner experiment --concurrency 16 --repetitions 1 --delay-ms 300
+          status=$?
+          set -e
+          test "$status" -eq 0 -o "$status" -eq 2
+          report=$(ls -t reports/*.json | head -1)
+          python3 scripts/verify_traces.py "$report"
+          docker compose -f compose.yaml -f compose.lab.yaml -f compose.trace.yaml stop jaeger
+          set +e
+          docker compose -f compose.yaml -f compose.lab.yaml -f compose.trace.yaml --profile experiment run --rm -T --no-deps runner experiment --concurrency 1 --repetitions 1 --delay-ms 0
+          status=$?
+          set -e
+          test "$status" -eq 2
+          report=$(ls -t reports/*.json | head -1)
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["outcome"]=="INCONCLUSIVE" and r["tracing"]["delivery"]=="NOT_VERIFIED" and r["tracing"]["traceContextObserved"]' "$report"
+      - name: Stop CI services
+        if: always()
+        env:
+          TRACELENS_DB_PASSWORD: ${{ github.run_id }}-${{ github.run_attempt }}-isolated-ci
+          TRACELENS_LAB_TOKEN: cleanup-placeholder-token-000000000000
+        run: docker compose -f compose.yaml -f compose.lab.yaml -f compose.trace.yaml down --remove-orphans
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+            reports/*.json
+            reports/*.md

@@ -1,0 +1,33 @@
+services:
+  app:
+    image: tracelens-trace:local
+    build:
+      target: tracing
+    environment:
+      JAVA_TOOL_OPTIONS: -javaagent:/opt/opentelemetry-javaagent.jar
+      TRACELENS_TRACE_ENABLED: "true"
+      OTEL_SERVICE_NAME: tracelens-app
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_TIMEOUT: "1000"
+  runner:
+    image: tracelens-trace:local
+    environment:
+      JAVA_TOOL_OPTIONS: -javaagent:/opt/opentelemetry-javaagent.jar
+      TRACELENS_TRACE_ENABLED: "true"
+      OTEL_SERVICE_NAME: tracelens-runner
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_TIMEOUT: "1000"
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.22.0@sha256:836b967b5abcf1f7758066aa6b348619267a2f1459f72d472840570f9bd88a17
+    ports:
+      - "127.0.0.1:16686:16686"

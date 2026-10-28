@@ -1,0 +1,22 @@
+/target/
+/reports/
+.env
+.env.*
+!.env.example
+*.log
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# JVM crash diagnostics
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+
+# Windows-generated files
+Thumbs.db
